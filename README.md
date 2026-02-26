@@ -250,18 +250,245 @@ Password: guest
 Role: Viewer
 ```
 
+
+- **Flask API Deployment**  
+  - Exposes `/`, `/health`, and `/metrics`  
+  - Metrics exported via `prometheus_flask_exporter`
+
+- **Prometheus Operator**  
+  Installed via Helm:
+  ```
+  helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+  helm install kube-prometheus-stack prometheus-community/kube-prometheus-stack -n monitoring --create-namespace
+  ```
+
+- **Grafana**  
+  - Exposed via NodePort  
+  - Includes custom dashboards for API metrics
+
 ---
 
-# 🎯 Key Features
+## Public Endpoints
+Replace `<EC2_PUBLIC_IP>` with your instance IP.
 
-- Fully containerized Python API  
-- Kubernetes deployment on MicroK8s  
-- Public API endpoint  
-- Public Grafana dashboard with guest access  
-- CI pipeline with Docker Hub  
-- Terraform‑managed infrastructure  
-- Prometheus metrics + Grafana dashboards  
-- Clean, production‑style repo structure  
+| Component | URL |
+|----------|-----|
+| **API Root** | `http://44.199.204.3:30080/` |
+| **API Health Check** | `http://44.199.204.3:30080/health` |
+| **API Metrics** | `http://44.199.204.3:30080/metrics` |
+| **Grafana Dashboard** | `http://44.199.204.3:32000/` |
+
+### Optional Read‑Only Grafana User
+```
+Username: guest
+Password: guest
+```
+
+---
+
+## Directory Structure
+```
+k8s/
+│
+├── deployment.yaml
+├── service-nodeport.yaml
+├── service-clusterip.yaml
+├── servicemonitor.yaml
+└── dashboards/
+    └── hello-api-dashboard.json
+```
+
+---
+
+## Flask API + Metrics Exporter
+
+### app.py
+```python
+from flask import Flask
+from prometheus_flask_exporter import PrometheusMetrics
+
+app = Flask(__name__)
+metrics = PrometheusMetrics(app)
+
+@app.route("/")
+def index():
+    return {"message": "Hello from Kubernetes!"}
+
+@app.route("/health")
+def health():
+    return {"status": "ok"}
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
+```
+
+### Metrics exposed
+The exporter automatically provides:
+
+- `flask_http_request_total`
+- `flask_http_request_duration_seconds`
+- `flask_exporter_info`
+- Default process metrics
+
+---
+
+## Kubernetes Manifests
+
+### Deployment
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-api
+  labels:
+    app: hello-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello-api
+  template:
+    metadata:
+      labels:
+        app: hello-api
+    spec:
+      containers:
+      - name: hello-api
+        image: debloxie/hello-api:latest
+        ports:
+        - containerPort: 5000
+```
+
+### NodePort Service (public)
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-api-nodeport
+  labels:
+    app: hello-api
+spec:
+  type: NodePort
+  selector:
+    app: hello-api
+  ports:
+  - name: http
+    port: 5000
+    targetPort: 5000
+    nodePort: 30080
+```
+
+### ClusterIP Service (Prometheus scraping)
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello-api
+  labels:
+    app: hello-api
+    release: kube-prometheus-stack
+spec:
+  selector:
+    app: hello-api
+  ports:
+  - name: http
+    port: 5000
+    targetPort: 5000
+```
+
+### ServiceMonitor
+```yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: hello-api-monitor
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: hello-api
+  namespaceSelector:
+    matchNames:
+      - default
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 15s
+```
+
+---
+
+## Grafana Dashboard Panels
+
+### Total Requests
+```
+sum(flask_http_request_total)
+```
+
+### Requests Per Second (RPS)
+```
+sum(rate(flask_http_request_total[1m]))
+```
+
+### Error Rate
+```
+sum(rate(flask_http_request_total{status!="200"}[5m]))
+```
+
+### Requests by Status Code
+```
+sum by (status) (flask_http_request_total)
+```
+
+### Requests by Method
+```
+sum by (method) (flask_http_request_total)
+```
+
+### RPS by Pod (scaling visibility)
+```
+sum by (pod) (rate(flask_http_request_total[1m]))
+```
+
+### 95th Percentile Latency (if histogram enabled)
+```
+histogram_quantile(0.95, sum(rate(flask_http_request_duration_seconds_bucket[5m])) by (le))
+```
+
+---
+
+## Validation Steps
+
+### 1. Confirm Prometheus target is UP
+```
+wget -qO- http://localhost:9090/api/v1/targets | grep hello-api -A5
+```
+
+### 2. Confirm metrics are flowing
+```
+wget -qO- "http://localhost:9090/api/v1/query?query=flask_http_request_total"
+```
+
+### 3. Generate traffic
+```
+for i in {1..20}; do curl -s http://<EC2_PUBLIC_IP>:30080/ > /dev/null; done
+```
+
+---
+
+## What This Project Demonstrates
+- Kubernetes deployment skills  
+- MicroK8s cluster setup on EC2  
+- Prometheus Operator integration  
+- Custom ServiceMonitor configuration  
+- Application‑level metrics instrumentation  
+- Grafana dashboard design  
+- Real‑world observability patterns  
+- Production‑style API monitoring  
+
+  
 
 ---
 
