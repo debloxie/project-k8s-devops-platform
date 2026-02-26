@@ -13,7 +13,7 @@ REQUEST_COUNT = Counter("hello_api_requests_total", "Total requests to Hello API
 @app.route("/")
 def home():
     REQUEST_COUNT.inc()
-    return jsonify({"message": "Hello from Debo's MicroK8s API!"})
+    return jsonify({"message": "Hello from Debo's MicroK8s API v2!"})
 
 @app.route("/health")
 def health():

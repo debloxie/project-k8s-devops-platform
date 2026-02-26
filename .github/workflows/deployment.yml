@@ -20,7 +20,7 @@ jobs:
 
     - name: Build and push image
       run: |
-        IMAGE="docker.io/${{ secrets.DOCKERHUB_USERNAME }}/hello-api:latest"
+        IMAGE="docker.io/${{ secrets.DOCKERHUB_USERNAME }}/hello-api:${{ github.run_number }}"
         docker build -t $IMAGE .
         docker push $IMAGE
 
@@ -40,6 +40,6 @@ jobs:
         key: ${{ secrets.EC2_SSH_KEY }}
         script: |
           microk8s kubectl set image deployment/hello-api \
-            hello-api=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/hello-api:latest \
+            hello-api=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/hello-api:${{ github.run_number }} \
             -n default
           microk8s kubectl rollout status deployment/hello-api -n default
