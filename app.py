@@ -1,8 +1,13 @@
 from flask import Flask, jsonify
-from prometheus_client import Counter, generate_latest
+from prometheus_flask_exporter import PrometheusMetrics
+from prometheus_client import Counter
 
 app = Flask(__name__)
 
+# Automatically collects latency, request count, status codes, etc.
+metrics = PrometheusMetrics(app)
+
+# Optional: keep your custom counter
 REQUEST_COUNT = Counter("hello_api_requests_total", "Total requests to Hello API")
 
 @app.route("/")
@@ -14,10 +19,5 @@ def home():
 def health():
     return jsonify({"status": "healthy"})
 
-@app.route("/metrics")
-def metrics():
-    return generate_latest(), 200, {"Content-Type": "text/plain"}
-
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
-
