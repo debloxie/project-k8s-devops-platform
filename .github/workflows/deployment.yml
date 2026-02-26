@@ -1,4 +1,4 @@
-name: Build and push to Docker Hub
+name: Build and Deploy to Kubernetes
 
 on:
   push:
@@ -32,7 +32,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Copy kubeconfig and deploy
+    - name: Deploy to EC2 MicroK8s
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.EC2_HOST }}
@@ -43,4 +43,3 @@ jobs:
             hello-api=docker.io/${{ secrets.DOCKERHUB_USERNAME }}/hello-api:latest \
             -n default
           microk8s kubectl rollout status deployment/hello-api -n default
-
